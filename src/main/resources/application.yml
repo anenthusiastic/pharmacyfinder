@@ -1,0 +1,49 @@
+server:
+  port: 8080
+
+pharmacy:
+  api:
+    nominatim:
+      base-url: https://nominatim.openstreetmap.org
+      timeout: 5s
+      retry-attempts: 3
+    osrm:
+      base-url: http://router.project-osrm.org
+      timeout: 10s
+      retry-attempts: 2
+    turkish-gov:
+      base-url: https://www.turkiye.gov.tr
+      timeout: 8s
+      retry-attempts: 3
+    ip-location:
+      base-url: http://ip-api.com
+      timeout: 3s
+      retry-attempts: 2
+  
+  search:
+    radius-step: 250
+    max-try-count: 10
+    query-result-limit: 15
+    initial-radius: 1000
+    one-degree-km: 111.0
+  
+  cache:
+    geocoding-ttl: 3600s
+    location-ttl: 1800s
+  
+  rate-limit:
+    requests-per-minute: 60
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.fatih.pharmacyfinder: INFO
+    org.springframework.web.reactive: DEBUG
