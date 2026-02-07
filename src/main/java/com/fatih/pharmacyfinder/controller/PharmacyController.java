@@ -3,7 +3,6 @@ package com.fatih.pharmacyfinder.controller;
 import com.fatih.pharmacyfinder.model.Pharmacy;
 import com.fatih.pharmacyfinder.service.IPharmacyService;
 import com.fatih.pharmacyfinder.service.MetricsService;
-import com.fatih.pharmacyfinder.service.ValidationService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -19,12 +18,10 @@ import java.util.Map;
 public class PharmacyController {
 
     private final IPharmacyService pharmacyService;
-    private final ValidationService validationService;
     private final MetricsService metricsService;
 
-    public PharmacyController(IPharmacyService pharmacyService, ValidationService validationService, MetricsService metricsService) {
+    public PharmacyController(IPharmacyService pharmacyService, MetricsService metricsService) {
         this.pharmacyService = pharmacyService;
-        this.validationService = validationService;
         this.metricsService = metricsService;
     }
 
@@ -38,14 +35,6 @@ public class PharmacyController {
         var timer = metricsService.startSearchTimer();
         
         String ipAddress = getClientIp(request);
-        
-        // Validate coordinates if provided
-        if ((lat != null || lon != null) && !validationService.isValidCoordinate(lat, lon)) {
-            log.warn("Invalid coordinates provided: lat={}, lon={}", lat, lon);
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Invalid coordinates provided"));
-        }
-        
         try {
             List<Pharmacy> pharmacies = pharmacyService.findPharmaciesBasedOnTime(lat, lon, ipAddress);
             metricsService.recordSearchTime(timer);

@@ -1,9 +1,10 @@
 package com.fatih.pharmacyfinder.service;
 
+import com.fatih.pharmacyfinder.client.IpLocationClient;
+import com.fatih.pharmacyfinder.client.NominatimClient;
 import com.fatih.pharmacyfinder.model.Location;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
@@ -11,18 +12,19 @@ import java.util.Map;
 @Service
 public class LocationService {
 
-    private final RestTemplate restTemplate;
+    private final IpLocationClient ipLocationClient;
+    private final NominatimClient nominatimClient;
 
-    public LocationService(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+    public LocationService(IpLocationClient ipLocationClient, NominatimClient nominatimClient) {
+        this.ipLocationClient = ipLocationClient;
+        this.nominatimClient = nominatimClient;
     }
 
     public Location detectUserLocation(String ipAddress) {
         try {
-            String url = String.format("http://ip-api.com/json/%s?fields=lat,lon,city,district", ipAddress);
-            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            Map<String, Object> response = ipLocationClient.getLocationByIp(ipAddress).block();
             
-            if (response != null) {
+            if (response != null && !response.isEmpty()) {
                 Location location = new Location();
                 location.setLat(((Number) response.get("lat")).doubleValue());
                 location.setLon(((Number) response.get("lon")).doubleValue());
@@ -39,8 +41,7 @@ public class LocationService {
 
     public Location getReverseGeocode(double lat, double lon) {
         try {
-            String url = String.format("https://nominatim.openstreetmap.org/reverse?lat=%s&lon=%s&format=json", lat, lon);
-            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            Map<String, Object> response = nominatimClient.reverseGeocode(lat, lon).block();
             
             if (response != null && response.containsKey("address")) {
                 Map<String, String> address = (Map<String, String>) response.get("address");
@@ -57,4 +58,5 @@ public class LocationService {
         }
         return null;
     }
+
 }

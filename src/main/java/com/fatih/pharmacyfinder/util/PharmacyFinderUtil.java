@@ -2,7 +2,7 @@ package com.fatih.pharmacyfinder.util;
 
 import com.fatih.pharmacyfinder.config.PharmacyProperties;
 import com.fatih.pharmacyfinder.model.Pharmacy;
-import com.fatih.pharmacyfinder.service.ApiClientService;
+import com.fatih.pharmacyfinder.client.NominatimClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -15,11 +15,11 @@ import java.util.Map;
 @Component
 public class PharmacyFinderUtil {
 
-    private final ApiClientService apiClientService;
+    private final NominatimClient nominatimClient;
     private final PharmacyProperties properties;
 
-    public PharmacyFinderUtil(ApiClientService apiClientService, PharmacyProperties properties) {
-        this.apiClientService = apiClientService;
+    public PharmacyFinderUtil(NominatimClient nominatimClient, PharmacyProperties properties) {
+        this.nominatimClient = nominatimClient;
         this.properties = properties;
     }
 
@@ -27,7 +27,7 @@ public class PharmacyFinderUtil {
         try {
             String query = URLEncoder.encode(address + ", " + city + ", Turkey", StandardCharsets.UTF_8);
             
-            List<Map<String, Object>> results = apiClientService.geocodeAddress(query).block();
+            List<Map<String, Object>> results = nominatimClient.geocodeAddress(query).block();
             
             if (results != null && !results.isEmpty()) {
                 Map<String, Object> location = results.get(0);

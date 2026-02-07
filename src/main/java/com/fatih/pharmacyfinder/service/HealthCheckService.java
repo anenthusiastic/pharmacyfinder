@@ -1,11 +1,10 @@
 package com.fatih.pharmacyfinder.service;
 
-import com.fatih.pharmacyfinder.config.PharmacyProperties;
+import com.fatih.pharmacyfinder.client.NominatimClient;
+import com.fatih.pharmacyfinder.client.OsrmClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -13,12 +12,12 @@ import java.util.Map;
 @Service
 public class HealthCheckService {
     
-    private final WebClient webClient;
-    private final PharmacyProperties properties;
+    private final NominatimClient nominatimClient;
+    private final OsrmClient osrmClient;
     
-    public HealthCheckService(WebClient webClient, PharmacyProperties properties) {
-        this.webClient = webClient;
-        this.properties = properties;
+    public HealthCheckService(NominatimClient nominatimClient, OsrmClient osrmClient) {
+        this.nominatimClient = nominatimClient;
+        this.osrmClient = osrmClient;
     }
     
     public Map<String, Object> checkHealth() {
@@ -35,14 +34,7 @@ public class HealthCheckService {
     
     private boolean checkNominatimHealth() {
         try {
-            return webClient.get()
-                    .uri(properties.getApi().getNominatim().getBaseUrl() + "/search?q=test&format=json&limit=1")
-                    .retrieve()
-                    .toBodilessEntity()
-                    .timeout(Duration.ofSeconds(5))
-                    .map(response -> response.getStatusCode().is2xxSuccessful())
-                    .onErrorReturn(false)
-                    .block();
+            return Boolean.TRUE.equals(nominatimClient.checkHealth().block());
         } catch (Exception e) {
             log.warn("Nominatim health check failed", e);
             return false;
@@ -51,14 +43,7 @@ public class HealthCheckService {
     
     private boolean checkOsrmHealth() {
         try {
-            return webClient.get()
-                    .uri(properties.getApi().getOsrm().getBaseUrl() + "/route/v1/driving/13.388860,52.517037;13.397634,52.529407")
-                    .retrieve()
-                    .toBodilessEntity()
-                    .timeout(Duration.ofSeconds(5))
-                    .map(response -> response.getStatusCode().is2xxSuccessful())
-                    .onErrorReturn(false)
-                    .block();
+            return Boolean.TRUE.equals(osrmClient.checkHealth().block());
         } catch (Exception e) {
             log.warn("OSRM health check failed", e);
             return false;

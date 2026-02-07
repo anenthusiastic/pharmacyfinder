@@ -1,8 +1,11 @@
 package com.fatih.pharmacyfinder.service;
 
+import com.fatih.pharmacyfinder.client.NominatimClient;
+import com.fatih.pharmacyfinder.client.OsrmClient;
 import com.fatih.pharmacyfinder.config.PharmacyProperties;
 import com.fatih.pharmacyfinder.exception.LocationNotDetectedException;
 import com.fatih.pharmacyfinder.exception.NoPharmacyNearbyException;
+import com.fatih.pharmacyfinder.model.Location;
 import com.fatih.pharmacyfinder.model.Pharmacy;
 import com.fatih.pharmacyfinder.util.PharmacyFinderUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +20,8 @@ import java.util.stream.Collectors;
 @Service
 public class PharmacyService implements IPharmacyService{
 
-    private final ApiClientService apiClientService;
+    private final NominatimClient nominatimClient;
+    private final OsrmClient osrmClient;
     private final LocationService locationService;
     private final PharmacyScheduleService scheduleService;
     private final OnDutyPharmacyService onDutyPharmacyService;
@@ -25,11 +29,12 @@ public class PharmacyService implements IPharmacyService{
     private final PharmacyFinderUtil pharmacyFinderUtil;
     private final ValidationService validationService;
 
-    public PharmacyService(ApiClientService apiClientService, LocationService locationService, 
+    public PharmacyService(NominatimClient nominatimClient, OsrmClient osrmClient, LocationService locationService, 
                            PharmacyScheduleService scheduleService, OnDutyPharmacyService onDutyPharmacyService,
                            PharmacyProperties properties, PharmacyFinderUtil pharmacyFinderUtil,
                            ValidationService validationService) {
-        this.apiClientService = apiClientService;
+        this.nominatimClient = nominatimClient;
+        this.osrmClient = osrmClient;
         this.locationService = locationService;
         this.scheduleService = scheduleService;
         this.onDutyPharmacyService = onDutyPharmacyService;
@@ -40,7 +45,13 @@ public class PharmacyService implements IPharmacyService{
 
     @Override
     public List<Pharmacy> findPharmaciesBasedOnTime(Double lat, Double lon, String ipAddress) {
-        if (validationService.isValidCoordinate(lat, lon)) {
+        if (!validationService.isValidCoordinate(lat, lon)) {
+            String errorMessage = String.format("Invalid coordinates provided: lat=%s, lon=%s", lat, lon);
+            log.warn(errorMessage);
+            throw new LocationNotDetectedException(errorMessage);
+        }
+        log.info("Finding pharmacies for lat: {}, lon: {}, ip: {}", lat, lon, ipAddress);
+        if (validationService.isCoordinatesNonNull(lat, lon)) {
             var location = locationService.getReverseGeocode(lat, lon);
             if (location == null) {
                 log.error("Could not reverse geocode location. Falling back to IP-based location.");
@@ -68,7 +79,7 @@ public class PharmacyService implements IPharmacyService{
         return processPharmacySearch(location);
     }
 
-    private List<Pharmacy> processPharmacySearch(com.fatih.pharmacyfinder.model.Location location) {
+    private List<Pharmacy> processPharmacySearch(Location location) {
         var closingTime = scheduleService.getClosingTime();
 
         if (scheduleService.isAfterClosingTime(closingTime)) {
@@ -108,13 +119,13 @@ public class PharmacyService implements IPharmacyService{
                 .collectList()
                 .block();
 
-        return pharmaciesWithDistance.stream()
+        return Objects.requireNonNull(pharmaciesWithDistance).stream()
                 .sorted(Comparator.comparingDouble(Pharmacy::getDistance))
                 .collect(Collectors.toList());
     }
 
     private Mono<Pharmacy> calculateDistanceReactive(double userLat, double userLon, Pharmacy pharmacy) {
-        return apiClientService.calculateDistance(userLon, userLat, pharmacy.getLon(), pharmacy.getLat())
+        return osrmClient.calculateDistance(userLon, userLat, pharmacy.getLon(), pharmacy.getLat())
                 .map(response -> {
                     if (response.get("routes") != null) {
                         List<Map<String, Object>> routes = (List<Map<String, Object>>) response.get("routes");
@@ -134,7 +145,7 @@ public class PharmacyService implements IPharmacyService{
     private List<Pharmacy> getPharmaciesWithinRadius(double userLat, double userLon, double radius) {
         String viewbox = pharmacyFinderUtil.generateViewbox(userLat, userLon, radius / 1000.0);
         
-        List<Map<String, Object>> results = apiClientService.searchPharmacies("eczane", viewbox).block();
+        List<Map<String, Object>> results = nominatimClient.searchPharmacies("eczane", viewbox).block();
         
         if (results == null || results.isEmpty()) {
             return List.of();

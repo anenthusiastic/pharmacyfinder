@@ -29,11 +29,11 @@ public class ValidationService {
     }
     
     public boolean isValidCoordinate(Double lat, Double lon) {
-        if (lat == null || lon == null) {
-            return false;
-        }
-        
         return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+    }
+
+    public boolean isCoordinatesNonNull(Double lat, Double lon) {
+        return lat != null && lon != null;
     }
     
     public boolean isValidCityOrDistrict(String value) {

@@ -1,5 +1,6 @@
 package com.fatih.pharmacyfinder.service;
 
+import com.fatih.pharmacyfinder.client.TurkishGovClient;
 import com.fatih.pharmacyfinder.model.Pharmacy;
 import com.fatih.pharmacyfinder.util.PharmacyFinderUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -16,16 +17,16 @@ import java.util.Map;
 @Service
 public class OnDutyPharmacyService {
 
-    private final ApiClientService apiClientService;
+    private final TurkishGovClient turkishGovClient;
     private final OnDutyPharmacyScraperService scraperService;
     private final PharmacyFinderUtil pharmacyFinderUtil;
     private final ValidationService validationService;
 
-    public OnDutyPharmacyService(ApiClientService apiClientService, 
+    public OnDutyPharmacyService(TurkishGovClient turkishGovClient, 
                                 OnDutyPharmacyScraperService scraperService,
                                 PharmacyFinderUtil pharmacyFinderUtil,
                                 ValidationService validationService) {
-        this.apiClientService = apiClientService;
+        this.turkishGovClient = turkishGovClient;
         this.scraperService = scraperService;
         this.pharmacyFinderUtil = pharmacyFinderUtil;
         this.validationService = validationService;
@@ -56,7 +57,7 @@ public class OnDutyPharmacyService {
             String encodedDistrict = URLEncoder.encode(district, StandardCharsets.UTF_8);
             String encodedCity = URLEncoder.encode(city, StandardCharsets.UTF_8);
             
-            Map<String, Object> response = apiClientService.fetchTurkishGovData(encodedDistrict, encodedCity).block();
+            Map<String, Object> response = turkishGovClient.fetchOnDutyPharmacies(encodedDistrict, encodedCity).block();
             
             if (response != null && response.get("data") != null) {
                 List<Map<String, Object>> data = (List<Map<String, Object>>) response.get("data");
