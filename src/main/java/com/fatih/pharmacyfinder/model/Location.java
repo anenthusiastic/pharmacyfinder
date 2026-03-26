@@ -12,4 +12,5 @@ public class Location {
     private double lon;
     private String district;
     private String city;
+    private String countryCode;
 }

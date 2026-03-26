@@ -2,6 +2,8 @@ server:
   port: 8080
 
 pharmacy:
+  default-country: Turkey
+  default-country-code: tr
   api:
     nominatim:
       base-url: https://nominatim.openstreetmap.org
@@ -15,10 +17,20 @@ pharmacy:
       base-url: https://www.turkiye.gov.tr
       timeout: 8s
       retry-attempts: 3
-    ip-location:
-      base-url: http://ip-api.com
-      timeout: 3s
+    izmir:
+      base-url: https://openapi.izmir.bel.tr
+      timeout: 5s
       retry-attempts: 2
+    collect:
+      base-url: https://api.collectapi.com
+      timeout: 5s
+      retry-attempts: 2
+      api-key: 3fjk810K34NIjAAV58IsOQ:16C09G0l3rOhiyL77xfFim
+    nager:
+      base-url: https://date.nager.at
+      timeout: 4s
+      retry-attempts: 2
+
   
   search:
     radius-step: 250

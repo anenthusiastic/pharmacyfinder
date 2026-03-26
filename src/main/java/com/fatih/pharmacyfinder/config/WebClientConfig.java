@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 @Configuration
 public class WebClientConfig {
-    
+
     @Bean
     public WebClient webClient(PharmacyProperties properties) {
         ConnectionProvider connectionProvider = ConnectionProvider.builder("pharmacy-finder")
@@ -25,16 +25,16 @@ public class WebClientConfig {
                 .pendingAcquireTimeout(Duration.ofSeconds(60))
                 .evictInBackground(Duration.ofSeconds(120))
                 .build();
-        
+
         HttpClient httpClient = HttpClient.create(connectionProvider)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
-                .doOnConnected(conn -> 
-                    conn.addHandlerLast(new ReadTimeoutHandler(10, TimeUnit.SECONDS))
+                .doOnConnected(conn -> conn.addHandlerLast(new ReadTimeoutHandler(10, TimeUnit.SECONDS))
                         .addHandlerLast(new WriteTimeoutHandler(10, TimeUnit.SECONDS)));
-        
+
         return WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
+                .defaultHeader("User-Agent", "PharmacyFinderApp/1.0 (contact: [EMAIL_ADDRESS])")
                 .build();
     }
 }

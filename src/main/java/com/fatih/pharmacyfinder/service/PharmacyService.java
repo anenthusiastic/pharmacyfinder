@@ -7,121 +7,155 @@ import com.fatih.pharmacyfinder.exception.LocationNotDetectedException;
 import com.fatih.pharmacyfinder.exception.NoPharmacyNearbyException;
 import com.fatih.pharmacyfinder.model.Location;
 import com.fatih.pharmacyfinder.model.Pharmacy;
+import com.fatih.pharmacyfinder.model.PharmacyResponse;
+import com.fatih.pharmacyfinder.model.PharmacySearchRequest;
 import com.fatih.pharmacyfinder.util.PharmacyFinderUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.*;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class PharmacyService implements IPharmacyService{
+public class PharmacyService {
 
     private final NominatimClient nominatimClient;
     private final OsrmClient osrmClient;
     private final LocationService locationService;
-    private final PharmacyScheduleService scheduleService;
+    private final PharmacyBusinessHoursService businessHoursService;
     private final OnDutyPharmacyService onDutyPharmacyService;
     private final PharmacyProperties properties;
     private final PharmacyFinderUtil pharmacyFinderUtil;
     private final ValidationService validationService;
 
-    public PharmacyService(NominatimClient nominatimClient, OsrmClient osrmClient, LocationService locationService, 
-                           PharmacyScheduleService scheduleService, OnDutyPharmacyService onDutyPharmacyService,
-                           PharmacyProperties properties, PharmacyFinderUtil pharmacyFinderUtil,
-                           ValidationService validationService) {
+    public PharmacyService(NominatimClient nominatimClient, OsrmClient osrmClient, LocationService locationService,
+            PharmacyBusinessHoursService businessHoursService, OnDutyPharmacyService onDutyPharmacyService,
+            PharmacyProperties properties, PharmacyFinderUtil pharmacyFinderUtil,
+            ValidationService validationService) {
         this.nominatimClient = nominatimClient;
         this.osrmClient = osrmClient;
         this.locationService = locationService;
-        this.scheduleService = scheduleService;
+        this.businessHoursService = businessHoursService;
         this.onDutyPharmacyService = onDutyPharmacyService;
         this.properties = properties;
         this.pharmacyFinderUtil = pharmacyFinderUtil;
         this.validationService = validationService;
     }
 
-    @Override
-    public List<Pharmacy> findPharmaciesBasedOnTime(Double lat, Double lon, String ipAddress) {
-        if (!validationService.isValidCoordinate(lat, lon)) {
-            String errorMessage = String.format("Invalid coordinates provided: lat=%s, lon=%s", lat, lon);
-            log.warn(errorMessage);
-            throw new LocationNotDetectedException(errorMessage);
+    public Mono<PharmacyResponse> findPharmaciesBasedOnTime(PharmacySearchRequest request) {
+        ZonedDateTime userTime = parseTime(request.getTime());
+
+        // 1. Manuel Sehir/Ilce/Adres Kullanici Tarafindan Verilmisse
+        if (!PharmacyFinderUtil.areAllNullOrBlank(request.getCity(), request.getDistrict(), request.getAddress())) {
+            log.info("Finding pharmacies using manual location: {}, {}, {}", request.getCity(), request.getDistrict(),
+                    request.getAddress());
+
+            return locationService.getForwardGeocode(request.getCity(), request.getDistrict(), request.getAddress())
+                    .switchIfEmpty(Mono.error(new LocationNotDetectedException(
+                            "Girdiğiniz konum (şehir/ilçe/adres) doğrulanamadı. Lütfen geçerli bir yer ismi girin.")))
+                    .flatMap(loc -> {
+                        loc.setCity(request.getCity());
+                        loc.setDistrict(request.getDistrict());
+                        return processPharmacySearch(loc, userTime);
+                    })
+                    .map(PharmacyResponse::new);
         }
-        log.info("Finding pharmacies for lat: {}, lon: {}, ip: {}", lat, lon, ipAddress);
-        if (validationService.isCoordinatesNonNull(lat, lon)) {
-            var location = locationService.getReverseGeocode(lat, lon);
-            if (location == null) {
-                log.error("Could not reverse geocode location. Falling back to IP-based location.");
-                return findPharmaciesBasedOnTimeByIp(ipAddress);
+
+        // 2. GPS (Koordinat) Bilgisi Varsa
+        if (request.getLat() != null && request.getLon() != null) {
+            if (!validationService.isValidCoordinate(request.getLat(), request.getLon())) {
+                String errorMessage = String.format("Invalid coordinates provided: lat=%s, lon=%s", request.getLat(),
+                        request.getLon());
+                log.warn(errorMessage);
+                return Mono.error(new LocationNotDetectedException(errorMessage));
             }
-            return processPharmacySearch(location);
+
+            Location location = new Location();
+            location.setLat(request.getLat());
+            location.setLon(request.getLon());
+            location.setCity(request.getCity());
+            location.setDistrict(request.getDistrict());
+
+            return processPharmacySearch(location, userTime)
+                    .map(PharmacyResponse::new);
         }
-        return findPharmaciesBasedOnTimeByIp(ipAddress);
+
+        // 3. Eğer Ne Şehir Ne de Koordinat Yoksa Kullanıcıyı Manuel Girişe Zorla
+        log.warn("No location provided (neither manual city nor GPS coordinates). Request rejected.");
+        return Mono.error(new LocationNotDetectedException(
+                "Konum tespit edilemedi. Lütfen GPS izni verin veya şehir/ilçe seçiminizi manuel yapın."));
     }
 
-    private List<Pharmacy> findPharmaciesBasedOnTimeByIp(String ipAddress) {
-        if(!validationService.isValidIpAddress(ipAddress)) {
-            String errorMessage = "Invalid IP address provided. Cannot determine location.";
-            log.error(errorMessage);
-            throw new LocationNotDetectedException(errorMessage);
+    private ZonedDateTime parseTime(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty()) {
+            return ZonedDateTime.now();
         }
-        
-        String sanitizedIp = validationService.sanitizeInput(ipAddress);
-        var location = locationService.detectUserLocation(sanitizedIp);
-        if (location == null) {
-            String errorMessage = "Could not detect user location from IP";
-            log.error(errorMessage);
-            throw new LocationNotDetectedException(errorMessage);
-        }
-        return processPharmacySearch(location);
-    }
-
-    private List<Pharmacy> processPharmacySearch(Location location) {
-        var closingTime = scheduleService.getClosingTime();
-
-        if (scheduleService.isAfterClosingTime(closingTime)) {
-            log.info("Out of business hours - fetching on-duty pharmacies");
-            return onDutyPharmacyService.getOnDutyPharmacies(location.getDistrict(), location.getCity());
-        } else {
-            log.info("In business hours - fetching nearby pharmacies");
-            return findNearbyPharmacies(location.getLat(), location.getLon(), properties.getSearch().getInitialRadius());
+        try {
+            return ZonedDateTime.parse(timeStr);
+        } catch (DateTimeParseException e) {
+            return ZonedDateTime.now(java.time.ZoneId.of("Europe/Istanbul"));
         }
     }
 
-    private List<Pharmacy> findNearbyPharmacies(double userLat, double userLon, double radius) {
-        List<Pharmacy> pharmacies;
-        int tryCount = 0;
-        do {
-            try {
-                pharmacies = getPharmaciesWithinRadius(userLat, userLon, radius);
-            } catch (Exception e) {
-                final String message = "Error fetching pharmacies from Nominatim API";
-                log.error(message + ": {}", e.getMessage());
-                throw new RuntimeException(message, e);
-            }
-            if (!pharmacies.isEmpty()) break;
-            radius += properties.getSearch().getRadiusStep();
-            tryCount++;
-        } while (tryCount < properties.getSearch().getMaxTryCount());
+    private Mono<List<Pharmacy>> processPharmacySearch(Location location, ZonedDateTime userTime) {
+        return locationService.enrichLocationWithAddress(location)
+                .flatMap(loc -> businessHoursService.isPharmacyClosed(loc.getCountryCode(), userTime)
+                        .flatMap(isClosed -> {
+                            if (isClosed) {
+                                log.info(
+                                        "Out of business hours or holiday - fetching nearby on-duty pharmacies for {}, {}",
+                                        loc.getDistrict(), loc.getCity());
+                                return onDutyPharmacyService.getOnDutyPharmacies(loc.getDistrict(), loc.getCity())
+                                        .flatMap(onDutyPharmacies -> getPharmaciesWithDistance(loc.getLat(),
+                                                loc.getLon(),
+                                                onDutyPharmacies));
+                            } else {
+                                log.info("In business hours - fetching nearby pharmacies for lat: {}, lon: {}",
+                                        loc.getLat(), loc.getLon());
+                                return findNearbyPharmacies(loc.getLat(), loc.getLon(),
+                                        properties.getSearch().getInitialRadius());
+                            }
+                        }));
+    }
 
-        if (pharmacies.isEmpty()) {
-            final String message = String.format("No pharmacies found in the area (lat : %s, lon : %s, radius : %s)", userLat, userLon, radius);
-            log.info(message);
-            throw new NoPharmacyNearbyException(message);
-        }
+    private Mono<List<Pharmacy>> findNearbyPharmacies(double userLat, double userLon, double radius) {
+        return findNearbyPharmaciesRecursive(userLat, userLon, radius, 0);
+    }
 
-        // Use reactive approach for distance calculations
-        List<Pharmacy> pharmaciesWithDistance = Flux.fromIterable(pharmacies)
+    private Mono<List<Pharmacy>> findNearbyPharmaciesRecursive(double userLat, double userLon, double radius,
+            int tryCount) {
+        return getPharmaciesWithinRadius(userLat, userLon, radius)
+                .flatMap(pharmacies -> {
+                    if (!pharmacies.isEmpty()) {
+                        return getPharmaciesWithDistance(userLat, userLon, pharmacies);
+                    }
+                    if (tryCount < properties.getSearch().getMaxTryCount() - 1) {
+                        return findNearbyPharmaciesRecursive(userLat, userLon,
+                                radius + properties.getSearch().getRadiusStep(), tryCount + 1);
+                    }
+                    final String message = String.format(
+                            "No pharmacies found in the area (lat : %s, lon : %s, radius : %s)",
+                            userLat, userLon, radius);
+                    log.info(message);
+                    return Mono.error(new NoPharmacyNearbyException(message));
+                });
+    }
+
+    private Mono<List<Pharmacy>> getPharmaciesWithDistance(double userLat, double userLon, List<Pharmacy> pharmacies) {
+        return Flux.fromIterable(pharmacies)
                 .flatMap(pharmacy -> calculateDistanceReactive(userLat, userLon, pharmacy))
                 .collectList()
-                .block();
-
-        return Objects.requireNonNull(pharmaciesWithDistance).stream()
-                .sorted(Comparator.comparingDouble(Pharmacy::getDistance))
-                .collect(Collectors.toList());
+                .map(list -> list.stream()
+                        .sorted(Comparator.comparingDouble(Pharmacy::getDistance))
+                        .collect(Collectors.toList()));
     }
 
     private Mono<Pharmacy> calculateDistanceReactive(double userLat, double userLon, Pharmacy pharmacy) {
@@ -135,32 +169,32 @@ public class PharmacyService implements IPharmacyService{
                             return pharmacy;
                         }
                     }
-                    log.warn("Invalid OSRM response for pharmacy: {}", pharmacy.getDisplay_name());
                     pharmacy.setDistance(Double.MAX_VALUE);
                     return pharmacy;
                 })
+                .doOnError(e -> log.warn("OSRM distance calculation failed for {}: {}", pharmacy.getDisplayName(),
+                        e.getMessage()))
                 .onErrorReturn(pharmacy.toBuilder().distance(Double.MAX_VALUE).build());
     }
 
-    private List<Pharmacy> getPharmaciesWithinRadius(double userLat, double userLon, double radius) {
+    private Mono<List<Pharmacy>> getPharmaciesWithinRadius(double userLat, double userLon, double radius) {
         String viewbox = pharmacyFinderUtil.generateViewbox(userLat, userLon, radius / 1000.0);
-        
-        List<Map<String, Object>> results = nominatimClient.searchPharmacies("eczane", viewbox).block();
-        
-        if (results == null || results.isEmpty()) {
-            return List.of();
-        }
-        
-        return results.stream()
-                .map(this::mapToPharmacy)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+        return nominatimClient.searchPharmacies("eczane", viewbox)
+                .map(results -> {
+                    if (results == null || results.isEmpty()) {
+                        return List.of();
+                    }
+                    return results.stream()
+                            .map(this::mapToPharmacy)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toList());
+                });
     }
-    
+
     private Pharmacy mapToPharmacy(Map<String, Object> data) {
         try {
             Pharmacy pharmacy = new Pharmacy();
-            pharmacy.setDisplay_name((String) data.get("display_name"));
+            pharmacy.setDisplayName((String) data.get("display_name"));
             pharmacy.setLat(Double.parseDouble((String) data.get("lat")));
             pharmacy.setLon(Double.parseDouble((String) data.get("lon")));
             return pharmacy;
@@ -169,6 +203,4 @@ public class PharmacyService implements IPharmacyService{
             return null;
         }
     }
-
-
 }

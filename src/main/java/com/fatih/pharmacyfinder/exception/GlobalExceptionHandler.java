@@ -1,29 +1,35 @@
 package com.fatih.pharmacyfinder.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@ControllerAdvice
+import java.util.Map;
+
+@Slf4j
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(value = NoPharmacyNearbyException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public @ResponseBody ResponseEntity<Object> handleException(NoPharmacyNearbyException ex) {
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(ex.getMessage());
+    @ExceptionHandler(LocationNotDetectedException.class)
+    public ResponseEntity<Map<String, String>> handleLocationNotDetected(LocationNotDetectedException e) {
+        log.warn("Location error: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", e.getMessage()));
     }
 
-    @ExceptionHandler(value = RestClientException.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public @ResponseBody ResponseEntity<Object> handleException(RestClientException ex) {
-        return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ex.getMessage());
+    @ExceptionHandler(NoPharmacyNearbyException.class)
+    public ResponseEntity<Map<String, String>> handleNoPharmacyNearby(NoPharmacyNearbyException e) {
+        log.info("Search result: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleGeneralException(Exception e) {
+        log.error("Unexpected error", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Sistemde beklenmedik bir hata oluştu. Lütfen daha sonra tekrar deneyin."));
     }
 }

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nöbetçi & Açık Eczane Bulucu</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo-container">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM16 13H13V16H11V13H8V11H11V8H13V11H16V13Z"
+                        fill="currentColor" />
+                </svg>
+                <h1>Eczane Bulucu</h1>
+            </div>
+            <p>Size en yakın açık veya nöbetçi eczaneleri anında bulun.</p>
+        </header>
+
+        <main>
+            <div class="action-card">
+                <p>Konumunuza göre eczaneleri listelemek için lütfen izin verin.</p>
+                <button id="findBtn" class="primary-btn">
+                    <span class="btn-text">En Yakın Eczaneleri Bul</span>
+                    <span class="loader hidden"></span>
+                </button>
+                <div id="statusMessage" class="status-message"></div>
+            </div>
+
+            <div id="resultsContainer" class="results-container hidden">
+                <h2>Yakındaki Eczaneler</h2>
+                <div id="pharmacyList" class="pharmacy-grid">
+                    <!-- Pharmacy cards will be injected here -->
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Eczane Bulucu. Tüm hakları saklıdır.</p>
+        </footer>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
