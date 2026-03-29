@@ -73,7 +73,6 @@ public class OnDutyPharmacyService {
 
     private Mono<List<Pharmacy>> fetchFromIzmirIfApplicable(String city, String district) {
         if (city.equalsIgnoreCase("izmir") || city.equalsIgnoreCase("İzmir")) {
-            log.info("Using Izmir Open Data API for {}", district);
             return fetchFromIzmirApi(district);
         }
         return Mono.just(List.of());
@@ -84,15 +83,9 @@ public class OnDutyPharmacyService {
                 .map(root -> {
                     List<Pharmacy> pharmacies = new ArrayList<>();
                     if (root != null && root.isArray()) {
-                        log.info("Izmir API returned {} items total", root.size());
-                        int loggedCount = 0;
                         for (JsonNode node : root) {
-                            String ilce = node.path("Ilce").asText();
-                            if (loggedCount < 5) {
-                                log.info("Sample district name from API: '{}'", ilce);
-                                loggedCount++;
-                            }
-                            if (district.equalsIgnoreCase(ilce.trim())) {
+                            String bolge = node.path("Bolge").asText();
+                            if (district.equalsIgnoreCase(bolge.trim())) {
                                 Pharmacy p = new Pharmacy();
                                 p.setDisplayName(node.path("Adi").asText());
                                 p.setLat(node.path("LokasyonY").asDouble());

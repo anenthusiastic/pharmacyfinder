@@ -24,14 +24,9 @@ public class CollectApiClient {
 
     public Mono<JsonNode> fetchOnDutyPharmacies(String city, String district) {
         return webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .scheme("https")
-                        .host("api.collectapi.com")
-                        .path("/health/dutyPharmacy")
-                        .queryParam("ilce", district)
-                        .queryParam("il", city)
-                        .build())
-                .header("authorization", properties.getApi().getCollect().getApiKey())
+                .uri(properties.getApi().getCollect().getBaseUrl() + "/health/dutyPharmacy?ilce={district}&il={city}",
+                        district, city)
+                .header("authorization", "apikey " + properties.getApi().getCollect().getApiKey())
                 .retrieve()
                 .bodyToMono(JsonNode.class)
                 .timeout(properties.getApi().getCollect().getTimeout())
